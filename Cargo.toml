@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "packages/orgish",
+    "packages/orgish-tools",
+]
+resolver = "2"

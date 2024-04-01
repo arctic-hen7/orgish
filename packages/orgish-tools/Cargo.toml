@@ -1,0 +1,24 @@
+[package]
+name = "orgish-tools"
+version = "0.1.0"
+authors = [ "Sam Brew <arctic.hen@pm.me>" ]
+edition = "2021"
+
+[dependencies]
+thiserror = "1"
+orgish = { version = "0.1", path = "../orgish" }
+chrono = "0.4"
+clap = { version = "4", features = [ "derive" ], optional = true }
+anyhow = { version = "1", optional = true }
+
+[lib]
+path = "src/lib.rs"
+name = "orgish_tools"
+
+[[bin]]
+path = "bin/main.rs"
+name = "orgish"
+
+[features]
+default = [ "cli" ]
+cli = [ "clap", "anyhow" ]
