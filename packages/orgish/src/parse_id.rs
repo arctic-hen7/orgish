@@ -69,7 +69,7 @@ impl ParseId for StringId {
 /// A nonexistent identifier. This can be used to strip the IDs from a document/node, or in testing,
 /// where it can be very useful to test parsing with IDs, and to then strip them to avoid having to
 /// handle them in string equivalence checks. It is rare to use this in production applications.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NoId;
 impl ParseId for NoId {
     fn initial() -> Self {
@@ -94,7 +94,7 @@ mod uuid_parser {
 
     /// An identifier parser built on v4 (random) UUIDs. This will assume any node with an ID is using
     /// the v4 UUID generation scheme, but will not force UUID creation for nodes without identifier.
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct UuidId(Option<Uuid>);
     impl std::ops::Deref for UuidId {
         type Target = Option<Uuid>;
@@ -138,7 +138,7 @@ mod force_uuid_parser {
     ///
     /// Unless you want to aggressively force all nodes in a document to have identifiers, you should use
     /// [`UuidId`] instead.
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct ForceUuidId(Uuid);
     impl std::ops::Deref for ForceUuidId {
         type Target = Uuid;
