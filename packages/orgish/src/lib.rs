@@ -61,15 +61,12 @@ impl<K: Keyword, I: ParseId> Default for Document<K, I> {
     }
 }
 impl<K: Keyword, I: ParseId> Document<K, I> {
-    /// Creates a new document with the given title and document-level tags.
-    pub fn new(title: String, tags: Vec<String>) -> Self {
-        let mut root = Node::new(0, title, None);
+    /// Creates a new document with the given attributes and document-level tags.
+    pub fn new(attributes: String, tags: Vec<String>) -> Self {
+        let mut root = Node::new(0, String::new(), None);
         *root.tags = tags;
 
-        Self {
-            root,
-            attributes: String::new(),
-        }
+        Self { root, attributes }
     }
     /// Transforms all nodes in this document to have a different type of unique identifier. This is extremely
     /// useful for mass migrations, as well as for removing identifiers in testing.
