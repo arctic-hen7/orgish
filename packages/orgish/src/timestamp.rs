@@ -7,12 +7,14 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
 
 /// An abstraction over dates and times where the times are optional.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DateTime {
     pub date: NaiveDate,
     pub time: Option<NaiveTime>,
 }
 /// The repeater in a timestamp (e.g. `+1w`).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Repeater {
     pub count: usize,
     pub unit: RepeaterUnit,
@@ -27,6 +29,7 @@ impl Repeater {
 // TODO Org's documentation doesn't list all possible repeaters, so I am literally
 // guessing here given I can't look at the source!
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RepeaterUnit {
     Day,
     Week,

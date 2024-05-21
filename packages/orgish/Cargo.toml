@@ -9,6 +9,8 @@ thiserror = "1"
 uuid = { version = "1", features = [ "v4", "fast-rng" ], optional = true }
 chrono = "^0.4.35"
 
+serde = { version = "1", features = [ "derive" ], optional = true }
+
 [features]
 default = [ "uuid-id-parser" ]
 uuid-id-parser = [ "uuid" ]
