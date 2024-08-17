@@ -1,5 +1,5 @@
 /// The formats we can parse from and export to.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Format {
     /// The Markdown format. This requires the use of `#`-based headings.
     Markdown,
