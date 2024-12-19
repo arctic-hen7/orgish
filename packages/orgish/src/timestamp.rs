@@ -6,14 +6,14 @@ use super::error::TimestampParseError;
 use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
 
 /// An abstraction over dates and times where the times are optional.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DateTime {
     pub date: NaiveDate,
     pub time: Option<NaiveTime>,
 }
 /// The repeater in a timestamp (e.g. `+1w`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Repeater {
     pub count: usize,
@@ -28,7 +28,7 @@ impl Repeater {
 /// The different units for repeaters.
 // TODO Org's documentation doesn't list all possible repeaters, so I am literally
 // guessing here given I can't look at the source!
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RepeaterUnit {
     Day,
@@ -68,7 +68,8 @@ impl RepeaterUnit {
 /// `<2023-01-01 Sun 9:00>--<2023-01-01 Sun 10:00>` would be, because the start and end
 /// are on the same day, be simplified when the timestamp is written back to a string as
 /// `<2023-01-01 Sun 9:00-10:00>`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Timestamp {
     /// The date (and optional time) that the timestamp begins at. If it has only one
     /// datetime entry, that will be considered as the start.

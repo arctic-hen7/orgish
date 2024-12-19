@@ -1,9 +1,13 @@
 /// The formats we can parse from and export to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Format {
     /// The Markdown format. This requires the use of `#`-based headings.
+    #[cfg_attr(feature = "serde", serde(alias = "md"))]
+    #[cfg_attr(feature = "serde", serde(rename = "markdown"))]
     Markdown,
     /// The Org mode format
+    #[cfg_attr(feature = "serde", serde(rename = "org"))]
     Org,
 }
 impl Format {

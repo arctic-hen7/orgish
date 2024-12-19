@@ -47,7 +47,9 @@ DEADLINE: <2023-01-01 Sun>
 # [#A] Heading 2
 <!--PROPERTIES
 FOO: bar
--->"#;
+-->
+
+Test"#;
     let document = Document::<CustomKeyword>::from_str(text, Format::Markdown).unwrap();
 
     // The easiest way of testing this is to ensure that everything gets rewritten correctly

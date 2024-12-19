@@ -62,6 +62,7 @@ impl<K: Keyword, I: ParseId> Default for Document<K, I> {
 }
 impl<K: Keyword, I: ParseId> Document<K, I> {
     /// Creates a new document with the given attributes and document-level tags.
+    // TODO: We don't take tags at the root anymore...
     pub fn new(attributes: String, tags: Vec<String>) -> Self {
         let mut root = Node::new(0, String::new(), None);
         *root.tags = tags;

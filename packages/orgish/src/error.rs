@@ -20,18 +20,6 @@ pub enum ParseError {
     PlanningRepeat { line: String },
     #[error("failed to parse node identifier: {value}")]
     IdParseFailed { value: String },
-    #[cfg(feature = "md-frontmatter-yaml")]
-    #[error("failed to parse yaml frontmatter in markdown document")]
-    YamlFrontmatterParseFailed {
-        #[source]
-        source: serde_yaml::Error,
-    },
-    #[cfg(feature = "md-frontmatter-toml")]
-    #[error("failed to parse toml frontmatter in markdown document")]
-    TomlFrontmatterParseFailed {
-        #[source]
-        source: toml::de::Error,
-    },
 }
 
 /// Errors that can occur specifically while parsing timestamps.
