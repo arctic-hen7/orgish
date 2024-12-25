@@ -196,6 +196,22 @@ fn timestamp_includes_works_for_range_repeat_years_outer() {
 
 // TODO Add tests for when `after_date < date`
 #[test]
+fn timestamp_next_date_works_for_single_day() {
+    let ts = Timestamp::from_str("<2024-01-01 Mon +1d>").unwrap();
+    assert_eq!(
+        ts.get_next_repeat(date!(2024, 01, 02)),
+        Some(date!(2024, 01, 02))
+    );
+    assert_eq!(
+        ts.get_next_repeat(date!(2024, 01, 03)),
+        Some(date!(2024, 01, 03))
+    );
+    assert_eq!(
+        ts.get_next_repeat(date!(2024, 01, 05)),
+        Some(date!(2024, 01, 05))
+    );
+}
+#[test]
 fn timestamp_next_date_works_for_days() {
     let ts = Timestamp::from_str("<2024-01-01 Mon +3d>").unwrap();
     assert_eq!(
