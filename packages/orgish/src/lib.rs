@@ -20,6 +20,7 @@ mod heading_parser;
 mod into_format;
 pub mod keyword;
 mod parse_id;
+mod parse_string;
 mod parser;
 pub mod timestamp;
 
@@ -30,6 +31,7 @@ pub mod tests;
 pub use self::keyword::Keyword;
 pub use format::*;
 pub use parse_id::*;
+pub use parse_string::ParseString;
 pub use timestamp::Timestamp;
 
 use error::ParseError;
@@ -39,9 +41,9 @@ use std::collections::HashMap;
 /// This does *not* save the document's format details, and conversion into another format is
 /// trivial.
 #[derive(Debug, Clone)]
-pub struct Document<K: Keyword, I: ParseId = StringId> {
+pub struct Document<K: Keyword, I: ParseId = StringId, S: ParseString = String> {
     /// The root node.
-    pub root: Node<K, I>,
+    pub root: Node<K, I, S>,
     /// Top-level attributes for the whole document.
     ///
     /// In Org mode, these will be things like `#+title` or `#+description`, while in Markdown
@@ -52,7 +54,7 @@ pub struct Document<K: Keyword, I: ParseId = StringId> {
     /// No parsing is attempted for attributes, they are simply stored as a continuous string.
     pub attributes: String,
 }
-impl<K: Keyword, I: ParseId> Default for Document<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Default for Document<K, I, S> {
     fn default() -> Self {
         Self {
             root: Node::default(),
@@ -60,22 +62,22 @@ impl<K: Keyword, I: ParseId> Default for Document<K, I> {
         }
     }
 }
-impl<K: Keyword, I: ParseId> Document<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     /// Creates a new document with the given attributes and document-level tags.
     // TODO: We don't take tags at the root anymore...
     pub fn new(attributes: String, tags: Vec<String>) -> Self {
-        let mut root = Node::new(0, String::new(), None);
+        let mut root = Node::new(0, S::default(), None);
         *root.tags = tags;
 
         Self { root, attributes }
     }
     /// Transforms all nodes in this document to have a different type of unique identifier. This is extremely
     /// useful for mass migrations, as well as for removing identifiers in testing.
-    pub fn map_ids<J: ParseId>(self, f: impl Fn(I) -> J) -> Document<K, J> {
-        fn map<K: Keyword, I: ParseId, J: ParseId>(
-            mut node: Node<K, I>,
+    pub fn map_ids<J: ParseId>(self, f: impl Fn(I) -> J) -> Document<K, J, S> {
+        fn map<K: Keyword, I: ParseId, J: ParseId, S: ParseString>(
+            mut node: Node<K, I, S>,
             f: &impl Fn(I) -> J,
-        ) -> Node<K, J> {
+        ) -> Node<K, J, S> {
             let props = std::mem::take(&mut node.properties);
             let new_id = f(props.id);
             Node {
@@ -107,16 +109,19 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
     /// Strips identifiers from the document and all nodes therein. This is almost exclusively useful in
     /// testing, where testing random UUIDs is generally very inconvenient, and simple string comparisons
     /// are far more efficient.
-    pub fn strip_ids(self) -> Document<K, NoId> {
+    pub fn strip_ids(self) -> Document<K, NoId, S> {
         self.map_ids(|_| NoId)
     }
     /// Transforms all nodes in this document to have a different keyword type. This is extremely useful for
     /// mass migrations.
-    pub fn map_keywords<L: Keyword>(self, f: &impl Fn(Option<K>) -> Option<L>) -> Document<L, I> {
-        fn map<K: Keyword, I: ParseId, L: Keyword>(
-            mut node: Node<K, I>,
+    pub fn map_keywords<L: Keyword>(
+        self,
+        f: &impl Fn(Option<K>) -> Option<L>,
+    ) -> Document<L, I, S> {
+        fn map<K: Keyword, I: ParseId, L: Keyword, S: ParseString>(
+            mut node: Node<K, I, S>,
             f: &impl Fn(Option<K>) -> Option<L>,
-        ) -> Node<L, I> {
+        ) -> Node<L, I, S> {
             let new_keyword = f(std::mem::take(&mut node.keyword));
             Node {
                 level: node.level,
@@ -144,7 +149,7 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
     /// Gets the last node in the tree at a certain level. This is used in the parser to get the correct
     /// parent for the next node at `level + 1`. This will return `None` if there are no nodes of the given
     /// level at the latest point in the tree.
-    fn get_last_node_at_level(&mut self, level: u8) -> Option<&mut Node<K, I>> {
+    fn get_last_node_at_level(&mut self, level: u8) -> Option<&mut Node<K, I, S>> {
         let mut curr_level = 0;
         let mut curr_parent = &mut self.root;
         while curr_level < level {
@@ -163,7 +168,7 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
 /// parsed here (and they notably cannot validly appear for headings), and will instead appear in the
 /// untyped `body` property of the relevant node.
 #[derive(Debug, Clone)]
-pub struct Node<K: Keyword, I: ParseId = StringId> {
+pub struct Node<K: Keyword, I: ParseId = StringId, S: ParseString = String> {
     /// The indent level of the heading. The root of the document will have level `0`. Once instantiated,
     /// the level of a node cannot be changed in order to preserve the property that levels increase in
     /// nesting.
@@ -175,7 +180,7 @@ pub struct Node<K: Keyword, I: ParseId = StringId> {
     ///
     /// In the root node of a document, this will be empty (the `attributes` map will contain the
     /// title instead).
-    pub title: String,
+    pub title: S,
     /// The priority of the heading.
     pub priority: Priority,
     /// Any tags the node has. Tag inheritance is *not* automatically implemented by this parser, and, as such,
@@ -188,7 +193,7 @@ pub struct Node<K: Keyword, I: ParseId = StringId> {
     /// but occur textually before them.
     pub planning: Planning,
     /// The properties of this node. Textually, these come directly after the planning information.
-    pub properties: Properties<I>,
+    pub properties: Properties<I, S>,
     /// The keyword for the node. This will be identified if it comes before a priority, or if it is the starting
     /// word of a title and matches one of the list of todo keywords given during parsing.
     pub keyword: Option<K>,
@@ -203,7 +208,7 @@ pub struct Node<K: Keyword, I: ParseId = StringId> {
     /// **Warning:** it is possible to modify the body of a node to introduce new nodes, however these will
     /// not be parsed, and it is strongly recommended to not do this, as there are far better programmatic
     /// ways to do this! It is, however, not technically an invalidity.
-    pub body: Option<String>,
+    pub body: Option<S>,
     /// Timestamps on this node, if any are present. We allow multiple (*not* a feature of most Org
     /// parsers, but does work in Emacs, hence implemented here).
     ///
@@ -214,14 +219,14 @@ pub struct Node<K: Keyword, I: ParseId = StringId> {
     /// than the level of this node, but *this is not guaranteed*. It is only guaranteed that, under normal
     /// operation, they will never be less than this node's level. As such, this property is private and
     /// manipulated through a series of methods.
-    children: Vec<Node<K, I>>,
+    children: Vec<Node<K, I, S>>,
 }
 // Manual `Default` impl to avoid requiring a default keyword
-impl<K: Keyword, I: ParseId> Default for Node<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Default for Node<K, I, S> {
     fn default() -> Self {
         Self {
             level: 0,
-            title: String::new(),
+            title: S::default(),
             priority: Priority::default(),
             tags: Tags::default(),
             planning: Planning::default(),
@@ -235,9 +240,9 @@ impl<K: Keyword, I: ParseId> Default for Node<K, I> {
 }
 // TODO: Create a `Children` guard for modifying the children, which could allow adding them
 // safely, but disallow raw changes to the underlying vector.
-impl<K: Keyword, I: ParseId> Node<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
     /// Creates a new node at the given level with the given title and body.
-    pub fn new(level: u8, title: String, body: Option<String>) -> Self {
+    pub fn new(level: u8, title: S, body: Option<S>) -> Self {
         Self {
             level,
             title,
@@ -315,7 +320,7 @@ impl<K: Keyword, I: ParseId> Node<K, I> {
     /// as unchecked, and should be used with caution.
     pub fn unchecked_set_level(&mut self, level: u8) {
         // Recursively applies the level diff to the given node and all children
-        fn set_level<K: Keyword, I: ParseId>(node: &mut Node<K, I>, diff: i8) {
+        fn set_level<K: Keyword, I: ParseId, S: ParseString>(node: &mut Node<K, I, S>, diff: i8) {
             let new_level = node.level as i8 - diff;
             // This is completely valid because `diff` was generated from the highest level in this
             // tree minus the new level, so it can't cause this to become negative or anything else
@@ -380,13 +385,13 @@ impl Planning {
 ///
 /// Properties are generic over the type of ID required.
 #[derive(Debug, Clone)]
-pub struct Properties<I: ParseId> {
+pub struct Properties<I: ParseId, S: ParseString> {
     /// The unique identifier of this entry.
     pub id: I,
     /// Freeform properties other than the ID.
-    inner: HashMap<String, String>,
+    inner: HashMap<String, S>,
 }
-impl<I: ParseId> Properties<I> {
+impl<I: ParseId, S: ParseString> Properties<I, S> {
     /// Adds a property pair from the given line to this set of properties. This is the general
     /// property parsing logic.
     pub(crate) fn add_line(&mut self, line: &str) -> Result<(), ParseError> {
@@ -413,13 +418,18 @@ impl<I: ParseId> Properties<I> {
                 });
             }
         } else {
-            self.inner.insert(key.to_string(), value.to_string());
+            self.inner.insert(
+                key.to_string(),
+                S::from_str(value.to_string()).map_err(|source| ParseError::ParseStringFailed {
+                    source: Box::new(source),
+                })?,
+            );
         }
 
         Ok(())
     }
 }
-impl<I: ParseId> Default for Properties<I> {
+impl<I: ParseId, S: ParseString> Default for Properties<I, S> {
     fn default() -> Self {
         Self {
             // This might create something like `None`, or it might create a new random UUID (which
@@ -431,13 +441,13 @@ impl<I: ParseId> Default for Properties<I> {
     }
 }
 // Even though we have the ID, properties are overwhelmingly manipulated like this
-impl<I: ParseId> std::ops::Deref for Properties<I> {
-    type Target = HashMap<String, String>;
+impl<I: ParseId, S: ParseString> std::ops::Deref for Properties<I, S> {
+    type Target = HashMap<String, S>;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-impl<I: ParseId> std::ops::DerefMut for Properties<I> {
+impl<I: ParseId, S: ParseString> std::ops::DerefMut for Properties<I, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }

@@ -4,9 +4,9 @@
 use super::{
     keyword::Keyword, Document, Node, ParseId, Planning, Priority, Properties, Tags, Timestamp,
 };
-use crate::Format;
+use crate::{Format, ParseString};
 
-impl<K: Keyword, I: ParseId> Document<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     /// Converts this document into a string.
     pub fn into_string(self, format: Format) -> String {
         let root_str = self.root.into_string(format);
@@ -39,7 +39,7 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
     }
 }
 
-impl<K: Keyword, I: ParseId> Node<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
     /// Converts this node into a string in the given format. Note that, while this function guarantees
     /// no information will be lost in the process of parse-then-write, information may be reshuffled,
     /// notably top-level attributes such as `#+title` and `#+filetags`, which will always come first,
@@ -80,7 +80,7 @@ impl<K: Keyword, I: ParseId> Node<K, I> {
                 .to_string()
                 .repeat(self.level as usize);
             let tags_str = with_space_before(&self.tags.into_string());
-            let title = self.title;
+            let title = self.title.to_string();
             let keyword =
                 with_space_after(&self.keyword.map(|k| k.into_string()).unwrap_or_default());
             let priority = with_space_after(&self.priority.into_string());
@@ -110,7 +110,7 @@ impl<K: Keyword, I: ParseId> Node<K, I> {
         if let Some(body) = self.body {
             // Even if this is empty, we still want to push it, because `Some("")` is a single
             // empty line
-            node_parts.push(body);
+            node_parts.push(body.to_string());
         }
 
         // Convert all the top-level children
@@ -157,7 +157,7 @@ impl Planning {
     }
 }
 
-impl<I: ParseId> Properties<I> {
+impl<I: ParseId, S: ParseString> Properties<I, S> {
     /// Converts these properties into a textual property drawer. With the exception of the `ID`
     /// property, which, if present, will always be placed first, the properties will always be written
     /// in alphabetical order.
@@ -193,7 +193,7 @@ impl<I: ParseId> Properties<I> {
             }
             properties_str.push_str(&k);
             properties_str.push_str(": ");
-            properties_str.push_str(&v);
+            properties_str.push_str(&v.to_string());
         }
         properties_str.push('\n');
         properties_str.push_str(format.get_properties_closer());

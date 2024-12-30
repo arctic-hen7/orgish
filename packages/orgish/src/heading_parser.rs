@@ -1,16 +1,17 @@
 //! Parsing logic for converting headings into machine-readable representations.
 
 use super::{keyword::Keyword, Node, ParseId, Priority, Tags, Timestamp};
-use crate::format::Format;
+use crate::{error::ParseError, format::Format, ParseString};
 
-impl<K: Keyword, I: ParseId> Node<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
     /// Checks if the given line represents a new heading. If so, this will parse the heading
-    /// and return its details as a new [`Node`].
+    /// and return its details as a new [`Node`]. A [`ParseError`] will occur if parsing the title
+    /// string fails.
     ///
     /// This takes a format to use for the parsing process.
-    pub fn from_heading_str(heading: &str, format: Format) -> Option<Self> {
+    pub fn from_heading_str(heading: &str, format: Format) -> Option<Result<Self, ParseError>> {
         if heading.starts_with(format.heading_char()) {
-            let mut node = Node::<K, I>::default();
+            let mut node = Node::<K, I, S>::default();
             let mut loc = NodeParseLocation::Stars;
 
             // The current thing we're parsing (whatever that might be)
@@ -204,10 +205,17 @@ impl<K: Keyword, I: ParseId> Node<K, I> {
 
             if let NodeParseLocation::Title = loc {
                 // Trim the title (spaces before tags and timestamps get accumulated)
-                node.title = curr.trim().to_string();
+                node.title = match S::from_str(curr.trim().to_string()).map_err(|source| {
+                    ParseError::ParseStringFailed {
+                        source: Box::new(source),
+                    }
+                }) {
+                    Ok(s) => s,
+                    Err(e) => return Some(Err(e)),
+                };
             }
 
-            Some(node)
+            Some(Ok(node))
         } else {
             None
         }

@@ -90,3 +90,72 @@ Final text"#;
         }
     }
 }
+
+struct CustomString {
+    inner: String,
+}
+impl Default for CustomString {
+    fn default() -> Self {
+        Self {
+            inner: "PRE!".to_string(),
+        }
+    }
+}
+impl ParseString for CustomString {
+    type Error = std::convert::Infallible;
+
+    fn from_str(s: String) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            inner: "PRE!".to_string() + &s,
+        })
+    }
+    fn to_string(&self) -> String {
+        self.inner.clone()
+    }
+}
+
+#[test]
+fn parser_should_work_with_custom_strings() {
+    let text = r#"#+title: Test Document
+#+author: Test
+
+Root
+
+* Heading 1
+
+** Heading 1.1
+*** TODO [#B] Task 1 <2023-01-01 Sun>
+- Some contents
+*** PROJ Project 1 :tag1:
+**** TODO Task 1.1 :tag1:tag2:
+DEADLINE: <2023-01-01 Sun>
+* [#A] Heading 2
+:PROPERTIES:
+:FOO: bar
+:END:"#;
+    let modified_text = r#"#+title: Test Document
+#+author: Test
+PRE!
+Root
+
+* PRE!Heading 1
+PRE!
+** PRE!Heading 1.1
+*** TODO [#B] PRE!Task 1 <2023-01-01 Sun>
+PRE!- Some contents
+*** PROJ PRE!Project 1 :tag1:
+**** TODO PRE!Task 1.1 :tag1:tag2:
+DEADLINE: <2023-01-01 Sun>
+* [#A] PRE!Heading 2
+:PROPERTIES:
+:FOO: PRE!bar
+:END:"#;
+    let document =
+        Document::<CustomKeyword, StringId, CustomString>::from_str(text, Format::Org).unwrap();
+
+    // The easiest way of testing this is to ensure that everything gets rewritten correctly
+    assert_eq!(document.into_string(Format::Org), modified_text);
+}

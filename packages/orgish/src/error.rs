@@ -20,6 +20,11 @@ pub enum ParseError {
     PlanningRepeat { line: String },
     #[error("failed to parse node identifier: {value}")]
     IdParseFailed { value: String },
+    #[error("failed to parse string")]
+    ParseStringFailed {
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 /// Errors that can occur specifically while parsing timestamps.

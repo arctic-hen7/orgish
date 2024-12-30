@@ -5,7 +5,7 @@ fn heading_parser_should_work() {
     let heading = r#"** TODO [#A] Foo bar <2023-05-09 Tue> :test1:test2:"#;
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 2);
     assert_eq!(node.title, "Foo bar");
@@ -22,7 +22,7 @@ fn heading_parser_should_parse_simple() {
     let heading = "* Foo bar";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -36,7 +36,7 @@ fn heading_parser_should_parse_with_keyword() {
     let heading = "* PROJ Test";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -50,7 +50,7 @@ fn heading_parser_should_parse_with_priority() {
     let heading = "* [#A] Test";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -64,7 +64,7 @@ fn heading_parser_should_parse_with_keyword_and_priority() {
     let heading = "* PROJ [#A] Test";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -78,7 +78,7 @@ fn heading_parser_should_parse_with_unknown_keyword_and_priority() {
     let heading = "* BLAH [#A] Test";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -92,7 +92,7 @@ fn heading_parser_should_parse_unknown_keyword_without_priority_in_title() {
     let heading = "* BLAH Test"; // Important that this stays as two words (priority parsing)!
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -106,7 +106,7 @@ fn heading_parser_should_parse_pure_keyword() {
     let heading = "* TODO";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -120,7 +120,7 @@ fn heading_parser_should_parse_pure_priority() {
     let heading = "* [#A]";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -134,7 +134,7 @@ fn heading_parser_should_parse_pure_keyword_and_priority() {
     let heading = "* TODO [#A]";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -148,7 +148,7 @@ fn heading_parser_should_parse_pure_unknown_keyword_and_priority() {
     let heading = "* BLAH [#A]";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(Some("A".to_string())));
@@ -162,7 +162,7 @@ fn heading_parser_should_count_early_tags() {
     let heading = "* Test :test1:test2:";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -177,7 +177,7 @@ fn heading_parser_should_count_early_timestamp() {
     let heading = "* Test <2023-01-01 Sun>";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));
@@ -200,7 +200,7 @@ fn heading_parser_should_parse_single_word_title() {
     let heading = "* Test";
     let node = Node::<CustomKeyword>::from_heading_str(&heading, Format::Org);
     assert!(node.is_some());
-    let node = node.unwrap();
+    let node = node.unwrap().unwrap();
 
     assert_eq!(node.level, 1);
     assert_eq!(node.priority, Priority(None));

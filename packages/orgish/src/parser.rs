@@ -3,21 +3,22 @@
 use super::{Document, Keyword, Node, Tags};
 use super::{ParseError, ParseId};
 use crate::format::Format;
+use crate::ParseString;
 use std::cmp::Ordering;
 
-impl<K: Keyword, I: ParseId> Document<K, I> {
+impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     /// Parses a document from its string representation.
     pub fn from_str(raw_contents: &str, format: Format) -> Result<Self, ParseError> {
-        let mut document = Document::<K, I>::default();
+        let mut document = Document::<K, I, S>::default();
         let mut document_attributes = String::new();
         // This will track the active node (*not* used for the root node!)
-        let mut curr_node = Node::<K, I>::default();
+        let mut curr_node = Node::<K, I, S>::default();
         let mut curr_parent = &mut document.root;
         // We add lines in the body to a vector to simplify newline management
         let mut curr_body: Vec<&str> = Vec::new();
 
         // Joins the body and handles special cases
-        let finish_body = |curr_body: &mut Vec<&str>, body: &mut Option<String>| {
+        let finish_body = |curr_body: &mut Vec<&str>, body: &mut Option<S>| {
             // Problem: a single empty newline in the body and a completely empty (i.e.
             // nonexistent) body are difficult to represent. We have a vector of lines
             // in `curr_body`, and an empty vector will produce the same output as a
@@ -27,9 +28,14 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
             *body = if curr_body.is_empty() {
                 None
             } else {
-                Some(curr_body.join("\n"))
+                Some(S::from_str(curr_body.join("\n")).map_err(|source| {
+                    ParseError::ParseStringFailed {
+                        source: Box::new(source),
+                    }
+                })?)
             };
             *curr_body = Vec::new();
+            Ok::<(), ParseError>(())
         };
 
         let mut loc = match format {
@@ -46,16 +52,17 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
             let line = lines[i];
 
             // Regardless of where we are, parsing a new node is the same (and should break the current parsing cycle)
-            if let Some(new_node) = Node::<K, I>::from_heading_str(line, format) {
+            if let Some(new_node) = Node::<K, I, S>::from_heading_str(line, format) {
                 if loc.is_start() {
                     // After we finish with the root node, we should just initialise `curr_node` properly, because we've
                     // been working on `curr_parent`
-                    curr_node = new_node;
+                    curr_node = new_node?;
                     // Handle the body
-                    finish_body(&mut curr_body, &mut curr_parent.body);
+                    finish_body(&mut curr_body, &mut curr_parent.body)?;
                 } else {
+                    let new_node = new_node?;
                     // Handle the body
-                    finish_body(&mut curr_body, &mut curr_node.body);
+                    finish_body(&mut curr_body, &mut curr_node.body)?;
 
                     let new_level = new_node.level;
                     let curr_level = curr_node.level;
@@ -241,7 +248,7 @@ impl<K: Keyword, I: ParseId> Document<K, I> {
             } else {
                 &mut curr_node.body
             },
-        );
+        )?;
 
         // If we got into any nodes, add the last one to its parent
         if !loc.is_start() {
