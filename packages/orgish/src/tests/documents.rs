@@ -136,7 +136,8 @@ DEADLINE: <2023-01-01 Sun>
 :PROPERTIES:
 :FOO: bar
 :END:"#;
-    let modified_text = r#"#+title: Test Document
+    // The title will be seen, but no other attributes will be
+    let modified_text = r#"#+title: PRE!Test Document
 #+author: Test
 PRE!
 Root
