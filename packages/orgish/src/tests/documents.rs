@@ -198,6 +198,7 @@ Root"#;
         document.into_string(Format::Markdown)
     );
 }
+
 #[test]
 fn parser_should_handle_toml_attrs() {
     let text = r#"+++
@@ -216,4 +217,76 @@ Root"#;
             .replace("[\"foo\"]", "[\"foo\", \"bar\"]"),
         document.into_string(Format::Markdown)
     );
+}
+
+#[test]
+fn conversion_org_to_md_should_work() {
+    let text_md = r#"---
+title: Test Document
+author: Test
+tags:
+- foo
+custom_prop: hello,world
+---
+
+Root"#;
+    let text_org = r#"#+title: Test Document
+#+author: Test
+#+filetags: :foo:
+#+custom_prop: hello,world
+
+Root"#;
+    let document = Document::<CustomKeyword>::from_str(text_org, Format::Org).unwrap();
+
+    assert_eq!(text_md, document.into_string(Format::Markdown));
+}
+
+#[test]
+fn conversion_toml_to_org_should_work() {
+    let text_md = r#"+++
+title = "Test Document"
+author = "Test"
+tags = ["foo", "bar"]
+
+[some_table]
+prop_1 = 5
+prop_2 = 2024-05-07
++++
+
+Root"#;
+    let text_org = r#"#+title: Test Document
+#+author: Test
+#+filetags: :foo:bar:
+#+some_table: { prop_1 = 5, prop_2 = 2024-05-07 }
+
+Root"#;
+    let document = Document::<CustomKeyword>::from_str(text_md, Format::Markdown).unwrap();
+
+    assert_eq!(text_org, document.into_string(Format::Org));
+}
+
+#[test]
+fn conversion_yaml_to_org_should_work() {
+    let text_md = r#"---
+title: Test Document
+author: Test
+tags:
+- foo
+- bar
+
+some_table:
+  prop_1: 5
+  prop_2: 2024-05-07
+---
+
+Root"#;
+    let text_org = r#"#+title: Test Document
+#+author: Test
+#+filetags: :foo:bar:
+#+some_table: prop_1: 5\nprop_2: 2024-05-07
+
+Root"#;
+    let document = Document::<CustomKeyword>::from_str(text_md, Format::Markdown).unwrap();
+
+    assert_eq!(text_org, document.into_string(Format::Org));
 }

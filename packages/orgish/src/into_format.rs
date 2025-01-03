@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{Attributes, Format, ParseString};
 use indexmap::IndexMap;
+use serde::Serialize;
 
 impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     /// Converts this document into a string.
@@ -338,14 +339,29 @@ impl Attributes {
                 }
                 Self::None => String::new(),
                 // Org to Markdown means conversion of key-value pairs into YAML, which is
-                // infallible
+                // infallible, but we must be sure to change `tags` to `filetags`
                 Self::Org(map) => {
                     let mut yaml_map = serde_yaml::Mapping::new();
                     for (key, value) in map {
-                        yaml_map.insert(key.into(), value.into());
+                        // Convert our one "implicit array" to a proper array
+                        if key == "filetags" {
+                            yaml_map.insert(
+                                "tags".into(),
+                                serde_yaml::Value::Sequence(
+                                    value
+                                        .split(':')
+                                        .filter(|s| !s.is_empty())
+                                        .map(|s| serde_yaml::Value::String(s.to_string()))
+                                        .collect::<Vec<_>>(),
+                                ),
+                            );
+                        } else {
+                            yaml_map.insert(key.into(), value.into());
+                        }
                     }
                     let yaml_str = serde_yaml::to_string(&yaml_map).unwrap();
-                    format!("---\n{yaml_str}\n---")
+                    // Implicit newline
+                    format!("---\n{yaml_str}---")
                 }
             },
             Format::Org => match self {
@@ -362,23 +378,76 @@ impl Attributes {
                     match self {
                         Self::MarkdownYaml(map) => {
                             for (key, value) in map {
-                                org_map.insert(
-                                    serde_yaml::to_string(&key).unwrap(),
-                                    serde_yaml::to_string(&value)
+                                // Handle `tags` -> `filetags` specially
+                                if key.as_str() == Some("tags") {
+                                    let tags = value
+                                        .as_sequence()
+                                        // This can't fail after parsing (which is the only time
+                                        // this crate-internal function can be called), because we
+                                        // check that `tags` is an array of strings
                                         .unwrap()
-                                        .replace("\n", "\\n")
-                                        .replace("\r", "\\r"),
-                                );
+                                        .iter()
+                                        // See above
+                                        .map(|v| v.as_str().unwrap().to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(":");
+                                    org_map.insert("filetags".to_string(), format!(":{tags}:"));
+                                } else {
+                                    org_map.insert(
+                                        // Inherent newlines get put all through this, so make sure we
+                                        // don't end up with multiline keys/values under any
+                                        // circumstances
+                                        serde_yaml::to_string(&key)
+                                            .unwrap()
+                                            .trim()
+                                            .replace("\n", "\\n")
+                                            .replace("\r", "\\r"),
+                                        serde_yaml::to_string(&value)
+                                            .unwrap()
+                                            .trim()
+                                            .replace("\n", "\\n")
+                                            .replace("\r", "\\r"),
+                                    );
+                                }
                             }
                         }
                         Self::MarkdownToml(map) => {
                             for (key, value) in map {
+                                // Need to use the special `ValueSerializer` because we aren't
+                                // working with a full document, and we'll make an exception for
+                                // strings and serialize them as-is (to avoid quotes). Also
+                                // specially handle `tags` and rewrite as `filetags` in Org's
+                                // format.
+                                let mut value_str = String::new();
+                                if key == "tags" {
+                                    value_str = format!(
+                                        ":{tags}:",
+                                        tags = value
+                                            .as_array()
+                                            // This can't fail after parsing (which is the only
+                                            // time this crate-internal function can be called),
+                                            // because we check that `tags` is an array of strings
+                                            .unwrap()
+                                            .iter()
+                                            // See above
+                                            .map(|v| v.as_str().unwrap().to_string())
+                                            .collect::<Vec<_>>()
+                                            .join(":")
+                                    );
+                                } else if value.is_str() {
+                                    value_str = value.as_str().unwrap().to_string();
+                                } else {
+                                    let ser = toml::ser::ValueSerializer::new(&mut value_str);
+                                    Serialize::serialize(&value, ser).unwrap();
+                                }
+
                                 org_map.insert(
-                                    key,
-                                    toml::to_string(&value)
-                                        .unwrap()
-                                        .replace("\n", "\\n")
-                                        .replace("\r", "\\r"),
+                                    if key == "tags" {
+                                        "filetags".to_string()
+                                    } else {
+                                        key
+                                    },
+                                    value_str.replace("\n", "\\n").replace("\r", "\\r"),
                                 );
                             }
                         }
