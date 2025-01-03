@@ -3,7 +3,8 @@
 use super::{Document, Keyword, Node, Tags};
 use super::{ParseError, ParseId};
 use crate::format::Format;
-use crate::ParseString;
+use crate::{Attributes, ParseString};
+use indexmap::IndexMap;
 use std::cmp::Ordering;
 
 impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
@@ -11,6 +12,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     pub fn from_str(raw_contents: &str, format: Format) -> Result<Self, ParseError> {
         let mut document = Document::<K, I, S>::default();
         let mut document_attributes = String::new();
+        let mut parsed_attributes: Option<Attributes> = None;
         // This will track the active node (*not* used for the root node!)
         let mut curr_node = Node::<K, I, S>::default();
         let mut curr_parent = &mut document.root;
@@ -118,10 +120,13 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                     }
                     // Special attribute checking is done on the *untrimmed* lines because
                     // there should be no additional spacing before the attributes
+                    // TODO: Is spacing between attributes ending up *after* them when we write
+                    // back to a string? Also need to parse these into a `IndexMap` at some
+                    // stage...
                     OrgStartLocation::Content => {
                         if line.starts_with("#+") {
                             // Only push a newline if there was something beforehand (avoids
-                            // spacing issues)
+                            // spacing issues). We parse these at the end.
                             if !document_attributes.is_empty() {
                                 document_attributes.push('\n');
                             }
@@ -146,11 +151,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                     MarkdownStartLocation::Beginning {
                         have_seen_frontmatter,
                     } => {
-                        if (trimmed_line == "---" || trimmed_line == "+++")
-                            && !*have_seen_frontmatter
-                        {
-                            // Make sure we get the delimiter in there
-                            document_attributes.push_str(line);
+                        if (line == "---" || line == "+++") && !*have_seen_frontmatter {
                             *start_loc = MarkdownStartLocation::Frontmatter;
                         } else if trimmed_line == format.get_properties_opener() {
                             // Nullify any newlines that might have been recorded between the
@@ -173,22 +174,35 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                         // NOTE: Spaces at the start of the document, and between the frontmatter
                         // and properties will not be preserved.
                     }
-                    // We support both TOML and YAML syntax (no proper parsing, only superficial)
+                    // We support both TOML and YAML syntax
                     MarkdownStartLocation::Frontmatter => {
-                        if trimmed_line == "---" || trimmed_line == "+++" {
+                        if line == "---" || line == "+++" {
                             // Go back to the beginning (we might have content or properties next)
                             //
                             // This won't create multiple frontmatter blocks, there's a check
                             // against that above
-                            document_attributes.push('\n');
-                            document_attributes.push_str(line);
                             *start_loc = MarkdownStartLocation::Beginning {
                                 have_seen_frontmatter: true,
                             };
+
+                            // Now parse the frontmatter we have
+                            if line == "---" {
+                                parsed_attributes = Some(Attributes::MarkdownYaml(
+                                    serde_yaml::from_str(&document_attributes).map_err(
+                                        |source| ParseError::YamlFrontmatterParseFailed { source },
+                                    )?,
+                                ));
+                            } else {
+                                parsed_attributes = Some(Attributes::MarkdownToml(
+                                    toml::from_str(&document_attributes).map_err(|source| {
+                                        ParseError::TomlFrontmatterParseFailed { source }
+                                    })?,
+                                ));
+                            }
                         } else {
-                            // Fine to always add a newline, there is guaranteed to be the
-                            // frontmatter fence at the start
-                            document_attributes.push('\n');
+                            if !document_attributes.is_empty() {
+                                document_attributes.push('\n');
+                            }
                             document_attributes.push_str(line);
                         }
                     }
@@ -255,8 +269,48 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
             curr_parent.add_child(curr_node)?;
         }
 
-        // Segmented to avoid double mutable borrows
-        document.attributes = document_attributes;
+        // If we've parsed Org mode, parse any attributes now (converting all keys to lowercase).
+        // We have no other place to do this because there's no defined point when attributes end.
+        if format == Format::Org {
+            let mut map = IndexMap::new();
+            for line in document_attributes.lines() {
+                let line = line.strip_prefix("#+").unwrap();
+                let line_parts = line.split_once(':');
+                if let Some((key, value)) = line_parts {
+                    map.insert(key.to_lowercase(), value.trim().to_string());
+                } else {
+                    // If there's nothing, insert an empty property
+                    map.insert(line.to_lowercase(), String::new());
+                }
+            }
+            debug_assert!(parsed_attributes.is_none());
+            parsed_attributes = Some(Attributes::Org(map));
+        }
+
+        // Segmented to avoid double mutable borrows. If we have attributes, then we reached the
+        // end of them and parsed them. If the string we parse from is empty, then we genuinely
+        // have no attributes. Anything else means *partial* attribute parsing, which is an error
+        // (e.g. an open frontmatter block that was never closed).
+        if let Some(parsed_attributes) = parsed_attributes {
+            document.attributes = parsed_attributes;
+        } else if document_attributes.is_empty() {
+            document.attributes = Attributes::None;
+        } else {
+            // This will only happen for Markdown
+            return Err(ParseError::IncompleteAttributes);
+        }
+
+        // Extract title and tags from the attributes (if they're present) and put them into the
+        // root node
+        document.root.title = S::from_str(document.attributes.title()?).map_err(|source| {
+            ParseError::ParseStringFailed {
+                source: Box::new(source),
+            }
+        })?;
+        document.root.tags = Tags {
+            inner: document.attributes.tags()?,
+        };
+
         Ok(document)
     }
 }

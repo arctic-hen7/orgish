@@ -8,10 +8,14 @@ edition = "2021"
 thiserror = "1"
 uuid = { version = "1", features = [ "v4", "fast-rng" ], optional = true }
 chrono = "^0.4.35"
+serde_yaml = "0.9.34"
+toml = { version = "0.8.19", features = [ "preserve_order" ] }
 
 serde = { version = "1", features = [ "derive" ], optional = true }
+indexmap = "2.7.0"
 
 [features]
 default = [ "uuid-id-parser" ]
 uuid-id-parser = [ "uuid" ]
+# Enables Serde support for timestamp-related structs
 serde = [ "chrono/serde", "dep:serde" ]

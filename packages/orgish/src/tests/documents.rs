@@ -159,3 +159,61 @@ DEADLINE: <2023-01-01 Sun>
     // The easiest way of testing this is to ensure that everything gets rewritten correctly
     assert_eq!(document.into_string(Format::Org), modified_text);
 }
+
+#[test]
+fn parser_should_handle_org_attrs() {
+    let text = r#"#+title: Test Document
+#+author: Test
+#+filetags: :foo:
+
+Root"#;
+    let mut document = Document::<CustomKeyword>::from_str(text, Format::Org).unwrap();
+    document.root.title = "Test Documents".to_string();
+    document.root.tags.push("bar".to_string());
+
+    assert_eq!(
+        text.replace("Test Document", "Test Documents")
+            .replace(":foo:", ":foo:bar:"),
+        document.into_string(Format::Org)
+    );
+}
+
+#[test]
+fn parser_should_handle_yaml_attrs() {
+    let text = r#"---
+title: Test Document
+author: Test
+tags:
+- foo
+---
+
+Root"#;
+    let mut document = Document::<CustomKeyword>::from_str(text, Format::Markdown).unwrap();
+    document.root.title = "Test Documents".to_string();
+    document.root.tags.push("bar".to_string());
+
+    assert_eq!(
+        text.replace("Test Document", "Test Documents")
+            .replace("- foo", "- foo\n- bar"),
+        document.into_string(Format::Markdown)
+    );
+}
+#[test]
+fn parser_should_handle_toml_attrs() {
+    let text = r#"+++
+title = "Test Document"
+author = "Test"
+tags = ["foo"]
++++
+
+Root"#;
+    let mut document = Document::<CustomKeyword>::from_str(text, Format::Markdown).unwrap();
+    document.root.title = "Test Documents".to_string();
+    document.root.tags.push("bar".to_string());
+
+    assert_eq!(
+        text.replace("Test Document", "Test Documents")
+            .replace("[\"foo\"]", "[\"foo\", \"bar\"]"),
+        document.into_string(Format::Markdown)
+    );
+}

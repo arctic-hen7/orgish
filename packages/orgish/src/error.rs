@@ -25,6 +25,22 @@ pub enum ParseError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+    #[error("failed to parse yaml frontmatter in markdown document")]
+    YamlFrontmatterParseFailed {
+        #[source]
+        source: serde_yaml::Error,
+    },
+    #[error("failed to parse toml frontmatter in markdown document")]
+    TomlFrontmatterParseFailed {
+        #[source]
+        source: toml::de::Error,
+    },
+    #[error("found incomplete attributes (e.g. unclosed frontmatter block)")]
+    IncompleteAttributes,
+    #[error("found non-string `title` attribute on the document root")]
+    RootTitleNotString,
+    #[error("found `tags` attribute on the document root that wasn't an array of strings")]
+    RootTagsNotStringVec,
 }
 
 /// Errors that can occur specifically while parsing timestamps.

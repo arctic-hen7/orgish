@@ -4,32 +4,42 @@
 use super::{
     keyword::Keyword, Document, Node, ParseId, Planning, Priority, Properties, Tags, Timestamp,
 };
-use crate::{Format, ParseString};
+use crate::{Attributes, Format, ParseString};
+use indexmap::IndexMap;
 
 impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
     /// Converts this document into a string.
-    pub fn into_string(self, format: Format) -> String {
+    pub fn into_string(mut self, format: Format) -> String {
+        // Implant the title and tags back into the attributes (we ned to provide the format in
+        // case there were no attributes before and we need to create some, in which case we may as
+        // well align with the format we're outputting to)
+        self.attributes
+            .set_title(self.root.title.to_string(), format);
+        self.attributes.set_tags(self.root.tags.to_vec(), format);
+        // This won't include the attributes
         let root_str = self.root.into_string(format);
         // Put the attributes in the appropriate place depending on the format. Note that the
         // parser will note down newlines from the content (the only palce formatting may not be
         // preserved is between attributes in Org mode and between frontmatter and properties in
-        // Org mode).
+        // Markdown).
         match format {
             Format::Markdown => {
-                if !self.attributes.is_empty() {
-                    format!("{}\n{root_str}", self.attributes)
+                let attributes_str = self.attributes.into_string(format);
+                if !attributes_str.is_empty() {
+                    format!("{}\n{root_str}", attributes_str)
                 } else {
                     root_str
                 }
             }
             Format::Org => {
-                if !self.attributes.is_empty() {
+                let attributes_str = self.attributes.into_string(format);
+                if !attributes_str.is_empty() {
                     if root_str.starts_with(":PROPERTIES:") {
                         // We'll put the attributes after the properties (no spacing therebetween)
-                        root_str.replacen(":END", &format!(":END:\n{}", self.attributes), 1)
+                        root_str.replacen(":END", &format!(":END:\n{}", attributes_str), 1)
                     } else {
                         // There are no top-level properties, we'll put the attributes at the start
-                        format!("{}\n{root_str}", self.attributes)
+                        format!("{}\n{root_str}", attributes_str)
                     }
                 } else {
                     root_str
@@ -102,8 +112,8 @@ impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
             push_part(self.planning.into_string());
             push_part(self.properties.into_string(format));
         } else {
-            // For the root, we only care about properties (the title and tags are left empty in
-            // the tree, and defined opaquely in the format-specific attributes)
+            // For the root, we only care about properties (the title and tags will be handled at
+            // the document-level, implanting from the attributes)
             push_part(self.properties.into_string(format));
         }
 
@@ -215,6 +225,173 @@ impl Tags {
             }
 
             tags_str
+        }
+    }
+}
+
+impl Attributes {
+    /// Sets the tags in these attributes to the given value.
+    fn set_tags(&mut self, tags: Vec<String>, format: Format) {
+        if tags.is_empty() {
+            // We have no tags, remove the property proactively
+            match self {
+                Self::Org(map) => {
+                    map.shift_remove("filetags");
+                }
+                Self::MarkdownYaml(map) => {
+                    map.remove("tags");
+                }
+                Self::MarkdownToml(map) => {
+                    map.remove("tags");
+                }
+                Self::None => {}
+            }
+        } else {
+            match self {
+                Self::Org(map) => {
+                    map.insert("filetags".to_string(), format!(":{}:", tags.join(":")));
+                }
+                Self::MarkdownYaml(map) => {
+                    map.insert("tags".into(), tags.into());
+                }
+                Self::MarkdownToml(map) => {
+                    map.insert("tags".to_string(), tags.into());
+                }
+                // If there are no attributes, use the format to create some appropriately
+                Self::None => match format {
+                    Format::Org => {
+                        let mut map = IndexMap::new();
+                        map.insert("filetags".to_string(), format!(":{}:", tags.join(":")));
+                        *self = Self::Org(map);
+                    }
+                    // YAML is the default for Markdown
+                    Format::Markdown => {
+                        let mut map = serde_yaml::Mapping::new();
+                        map.insert("tags".into(), tags.into());
+                        *self = Self::MarkdownYaml(map);
+                    }
+                },
+            }
+        }
+    }
+    /// Sets the title in these attributes to the given string (if set).
+    fn set_title(&mut self, title: String, format: Format) {
+        if title.is_empty() {
+            match self {
+                Self::Org(map) => {
+                    map.shift_remove("title");
+                }
+                Self::MarkdownYaml(map) => {
+                    map.remove("title");
+                }
+                Self::MarkdownToml(map) => {
+                    map.remove("title");
+                }
+                Self::None => {}
+            }
+        } else {
+            match self {
+                Self::Org(map) => {
+                    map.insert("title".to_string(), title);
+                }
+                Self::MarkdownYaml(map) => {
+                    map.insert("title".into(), title.into());
+                }
+                Self::MarkdownToml(map) => {
+                    map.insert("title".to_string(), title.into());
+                }
+                // Create attributes from the format
+                Self::None => match format {
+                    Format::Org => {
+                        let mut map = IndexMap::new();
+                        map.insert("title".to_string(), title);
+                        *self = Self::Org(map);
+                    }
+                    Format::Markdown => {
+                        let mut map = serde_yaml::Mapping::new();
+                        map.insert("title".into(), title.into());
+                        *self = Self::MarkdownYaml(map);
+                    }
+                },
+            }
+        }
+    }
+    /// Converts these attributes into a string in the given format. If the format matches what the
+    /// attributes were originally parsed as, this will proceed without problems. If converting
+    /// from Org to Markdown, YAML frontmatter will be returned. If converting from YAML/TOML
+    /// Markdown to Org, any non-string properties will be serialised to strings and inserted as
+    /// single-line values.
+    fn into_string(self, format: Format) -> String {
+        match format {
+            Format::Markdown => match self {
+                Self::MarkdownYaml(map) => {
+                    // This is guaranteed to be a valid YAML value
+                    let yaml_str = serde_yaml::to_string(&map).unwrap();
+                    // There is a trailing newline
+                    format!("---\n{yaml_str}---")
+                }
+                Self::MarkdownToml(map) => {
+                    // This is guaranteed to be a valid TOML value
+                    let toml_str = toml::to_string(&map).unwrap();
+                    // There is a trailing newline
+                    format!("+++\n{toml_str}+++")
+                }
+                Self::None => String::new(),
+                // Org to Markdown means conversion of key-value pairs into YAML, which is
+                // infallible
+                Self::Org(map) => {
+                    let mut yaml_map = serde_yaml::Mapping::new();
+                    for (key, value) in map {
+                        yaml_map.insert(key.into(), value.into());
+                    }
+                    let yaml_str = serde_yaml::to_string(&yaml_map).unwrap();
+                    format!("---\n{yaml_str}\n---")
+                }
+            },
+            Format::Org => match self {
+                Self::Org(map) => map
+                    .into_iter()
+                    .map(|(key, value)| format!("#+{key}: {value}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                Self::None => String::new(),
+                Self::MarkdownToml(_) | Self::MarkdownYaml(_) => {
+                    let mut org_map = IndexMap::new();
+
+                    // Stringify every key and value, and add them to the Org map
+                    match self {
+                        Self::MarkdownYaml(map) => {
+                            for (key, value) in map {
+                                org_map.insert(
+                                    serde_yaml::to_string(&key).unwrap(),
+                                    serde_yaml::to_string(&value)
+                                        .unwrap()
+                                        .replace("\n", "\\n")
+                                        .replace("\r", "\\r"),
+                                );
+                            }
+                        }
+                        Self::MarkdownToml(map) => {
+                            for (key, value) in map {
+                                org_map.insert(
+                                    key,
+                                    toml::to_string(&value)
+                                        .unwrap()
+                                        .replace("\n", "\\n")
+                                        .replace("\r", "\\r"),
+                                );
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+
+                    org_map
+                        .into_iter()
+                        .map(|(key, value)| format!("#+{key}: {value}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            },
         }
     }
 }

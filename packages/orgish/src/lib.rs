@@ -35,7 +35,8 @@ pub use parse_string::ParseString;
 pub use timestamp::Timestamp;
 
 use error::ParseError;
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use std::{collections::HashMap, convert::identity};
 
 /// A document in some format. The document's properties and root body will be captured in the root node.
 /// This does *not* save the document's format details, and conversion into another format is
@@ -47,30 +48,30 @@ pub struct Document<K: Keyword, I: ParseId = StringId, S: ParseString = String> 
     /// Top-level attributes for the whole document.
     ///
     /// In Org mode, these will be things like `#+title` or `#+description`, while in Markdown
-    /// they'll be the parsed contents of a YAML or TOML frontmatter block, without nesting. Any
-    /// nesting will trigger a parsing error, which ensures compatibility between Markdown and Org
-    /// mode.
+    /// they'll be the parsed contents of a YAML or TOML frontmatter block.
     ///
-    /// No parsing is attempted for attributes, they are simply stored as a continuous string.
-    pub attributes: String,
+    /// The title and tags will be extracted from here and implanted into the root node, where they
+    /// may be changed during operation, before being updated in the attributes again when written
+    /// back to a string. As such, the title and tags in here should *not* be depended on!
+    pub attributes: Attributes,
 }
 impl<K: Keyword, I: ParseId, S: ParseString> Default for Document<K, I, S> {
     fn default() -> Self {
         Self {
             root: Node::default(),
-            attributes: String::new(),
+            attributes: Attributes::None,
         }
     }
 }
 impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
-    /// Creates a new document with the given attributes and document-level tags.
-    // TODO: We don't take tags at the root anymore...
-    pub fn new(attributes: String, tags: Vec<String>) -> Self {
-        let mut root = Node::new(0, S::default(), None);
-        *root.tags = tags;
-
-        Self { root, attributes }
-    }
+    // /// Creates a new document with the given attributes and document-level tags.
+    // // TODO: We don't take tags at the root anymore...
+    // pub fn new(attributes: String, tags: Vec<String>) -> Self {
+    //     let mut root = Node::new(0, S::default(), None);
+    //     *root.tags = tags;
+    //
+    //     Self { root, attributes }
+    // }
     /// Transforms all nodes in this document to have a different type of unique identifier. This is extremely
     /// useful for mass migrations, as well as for removing identifiers in testing.
     pub fn map_ids<J: ParseId>(self, f: impl Fn(I) -> J) -> Document<K, J, S> {
@@ -158,6 +159,116 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
         }
 
         Some(curr_parent)
+    }
+}
+
+/// The attributes a document can contain at its start. These are stored in generally
+/// format-specific ways, and are parsed only for a title and tags. They will be left in the order
+/// they were originall parsed.
+#[derive(Clone, Debug)]
+pub enum Attributes {
+    /// An ordered map of Org properties, which must be key-value string pairs (any additional
+    /// parsing should be done by the user). For an Org-mode document, this is *guaranteed* to be
+    /// the attribute format.
+    ///
+    /// Note that all attribute keys will be converted to lowercase when written back to a string.
+    Org(IndexMap<String, String>),
+    /// YAML properties from Markdown frontmatter. This is guaranteed to be the attribute format
+    /// used for Markdown documents with `---` frontmatter.
+    ///
+    /// If a conversion from Org to Markdown is performed, this format will be used.
+    MarkdownYaml(serde_yaml::Mapping),
+    /// TOML properties from Markdown frontmatter. This is guaranteed to be the attribute format
+    /// used for Markdown documents with `+++` frontmatter.
+    MarkdownToml(toml::Table),
+    None,
+}
+impl Attributes {
+    /// Gets the title from these attributes, if there is one.
+    pub(crate) fn title(&self) -> Result<String, ParseError> {
+        match &self {
+            Self::Org(map) => Ok(map.get("title").cloned().unwrap_or_else(String::new)),
+            // A non-string title is an error because otherwise we'd overwrite it with nothing wehn
+            // writing back to a string
+            Self::MarkdownYaml(map) => map
+                .get("title")
+                .map(|val| {
+                    val.as_str()
+                        .map(|s| s.to_string())
+                        .ok_or(ParseError::RootTitleNotString)
+                })
+                .unwrap_or_else(|| Ok(String::new())),
+            Self::MarkdownToml(map) => map
+                .get("title")
+                .map(|val| {
+                    val.as_str()
+                        .map(|s| s.to_string())
+                        .ok_or(ParseError::RootTitleNotString)
+                })
+                .unwrap_or_else(|| Ok(String::new())),
+            Self::None => Ok(String::new()),
+        }
+    }
+    /// Gets the tags from these attributes. If none are defined, this will be an empty vector,
+    /// which should be written back as an absence of the `tags` property.
+    pub(crate) fn tags(&self) -> Result<Vec<String>, ParseError> {
+        match &self {
+            Self::Org(map) => Ok(map
+                // Yes, this is officially how Org handles top-level tags
+                .get("filetags")
+                // Split tags of the form `:hello:world:`
+                .map(|tags_str| {
+                    tags_str
+                        .split(':')
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect()
+                })
+                .unwrap_or_else(|| Vec::new())),
+            // A non-string title is an error because otherwise we'd overwrite it with nothing wehn
+            // writing back to a string
+            Self::MarkdownYaml(map) => map
+                .get("tags")
+                .map(|val| {
+                    // Try to convert to a vector...
+                    val.as_sequence()
+                        .ok_or(ParseError::RootTagsNotStringVec)
+                        // ...if that worked, try to convert every element to a string
+                        .map(|seq| {
+                            seq.into_iter()
+                                .map(|val| {
+                                    val.as_str()
+                                        .map(|s| s.to_string())
+                                        .ok_or(ParseError::RootTagsNotStringVec)
+                                })
+                                .collect::<Result<Vec<String>, ParseError>>()
+                        })
+                        // Now we have an outer `Result` for a non-vector, and an inner result for any
+                        // non-strings, flatten the two
+                        .map_or(Err(ParseError::RootTagsNotStringVec), identity)
+                })
+                // No defined tags are the same as defined no tags
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Self::MarkdownToml(map) => map
+                .get("tags")
+                .map(|val| {
+                    val.as_array()
+                        .ok_or(ParseError::RootTagsNotStringVec)
+                        .map(|arr| {
+                            arr.into_iter()
+                                .map(|val| {
+                                    val.as_str()
+                                        .map(|s| s.to_string())
+                                        .ok_or(ParseError::RootTagsNotStringVec)
+                                })
+                                .collect::<Result<Vec<String>, ParseError>>()
+                        })
+                        .map_or(Err(ParseError::RootTagsNotStringVec), identity)
+                })
+                // No defined tags are the same as defined no tags
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Self::None => Ok(Vec::new()),
+        }
     }
 }
 
