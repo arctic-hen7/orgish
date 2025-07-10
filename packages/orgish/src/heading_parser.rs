@@ -205,7 +205,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
 
             if let NodeParseLocation::Title = loc {
                 // Trim the title (spaces before tags and timestamps get accumulated)
-                node.title = match S::from_str(curr.trim().to_string()).map_err(|source| {
+                node.title = match S::from_str(curr.trim().to_string(), format).map_err(|source| {
                     ParseError::ParseStringFailed {
                         source: Box::new(source),
                     }

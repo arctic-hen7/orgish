@@ -505,7 +505,7 @@ pub struct Properties<I: ParseId, S: ParseString> {
 impl<I: ParseId, S: ParseString> Properties<I, S> {
     /// Adds a property pair from the given line to this set of properties. This is the general
     /// property parsing logic.
-    pub(crate) fn add_line(&mut self, line: &str) -> Result<(), ParseError> {
+    pub(crate) fn add_line(&mut self, line: &str, format: Format) -> Result<(), ParseError> {
         // Form: `:KEY: value` (first colon won't appear in Markdown, so we treat it as optional)
         let line = line.strip_prefix(':').unwrap_or(line);
         // Get the key and value
@@ -531,8 +531,10 @@ impl<I: ParseId, S: ParseString> Properties<I, S> {
         } else {
             self.inner.insert(
                 key.to_string(),
-                S::from_str(value.to_string()).map_err(|source| ParseError::ParseStringFailed {
-                    source: Box::new(source),
+                S::from_str(value.to_string(), format).map_err(|source| {
+                    ParseError::ParseStringFailed {
+                        source: Box::new(source),
+                    }
                 })?,
             );
         }

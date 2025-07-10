@@ -104,7 +104,7 @@ impl Default for CustomString {
 impl ParseString for CustomString {
     type Error = std::convert::Infallible;
 
-    fn from_str(s: String) -> Result<Self, Self::Error>
+    fn from_str(s: String, _format: Format) -> Result<Self, Self::Error>
     where
         Self: Sized,
     {
@@ -112,7 +112,7 @@ impl ParseString for CustomString {
             inner: "PRE!".to_string() + &s,
         })
     }
-    fn to_string(&self) -> String {
+    fn to_string(&self, _format: Format) -> String {
         self.inner.clone()
     }
 }

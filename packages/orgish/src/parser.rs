@@ -30,7 +30,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
             *body = if curr_body.is_empty() {
                 None
             } else {
-                Some(S::from_str(curr_body.join("\n")).map_err(|source| {
+                Some(S::from_str(curr_body.join("\n"), format).map_err(|source| {
                     ParseError::ParseStringFailed {
                         source: Box::new(source),
                     }
@@ -115,7 +115,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                             *start_loc = OrgStartLocation::Content;
                         } else if !trimmed_line.is_empty() {
                             // Parse this property
-                            curr_parent.properties.add_line(trimmed_line)?;
+                            curr_parent.properties.add_line(trimmed_line, format)?;
                         }
                     }
                     // Special attribute checking is done on the *untrimmed* lines because
@@ -213,7 +213,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                             *start_loc = MarkdownStartLocation::Content;
                         } else if !trimmed_line.is_empty() {
                             // Parse this property
-                            curr_parent.properties.add_line(trimmed_line)?;
+                            curr_parent.properties.add_line(trimmed_line, format)?;
                         }
                     }
                     // There are no attributes to check, or anything else
@@ -242,7 +242,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
                         loc = ParseLocation::Body;
                     } else if !trimmed_line.is_empty() {
                         // Parse this property
-                        curr_node.properties.add_line(trimmed_line)?;
+                        curr_node.properties.add_line(trimmed_line, format)?;
                     }
                 }
                 // The body of a non-root node (detection of new nodes happens above, so this
@@ -302,11 +302,12 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
 
         // Extract title and tags from the attributes (if they're present) and put them into the
         // root node
-        document.root.title = S::from_str(document.attributes.title()?).map_err(|source| {
-            ParseError::ParseStringFailed {
-                source: Box::new(source),
-            }
-        })?;
+        document.root.title =
+            S::from_str(document.attributes.title()?, format).map_err(|source| {
+                ParseError::ParseStringFailed {
+                    source: Box::new(source),
+                }
+            })?;
         document.root.tags = Tags {
             inner: document.attributes.tags()?,
         };

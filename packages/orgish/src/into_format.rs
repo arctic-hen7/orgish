@@ -15,7 +15,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Document<K, I, S> {
         // case there were no attributes before and we need to create some, in which case we may as
         // well align with the format we're outputting to)
         self.attributes
-            .set_title(self.root.title.to_string(), format);
+            .set_title(self.root.title.to_string(format), format);
         self.attributes.set_tags(self.root.tags.to_vec(), format);
         // This won't include the attributes
         let root_str = self.root.into_string(format);
@@ -91,7 +91,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
                 .to_string()
                 .repeat(self.level as usize);
             let tags_str = with_space_before(&self.tags.into_string());
-            let title = self.title.to_string();
+            let title = self.title.to_string(format);
             let keyword =
                 with_space_after(&self.keyword.map(|k| k.into_string()).unwrap_or_default());
             let priority = with_space_after(&self.priority.into_string());
@@ -121,7 +121,7 @@ impl<K: Keyword, I: ParseId, S: ParseString> Node<K, I, S> {
         if let Some(body) = self.body {
             // Even if this is empty, we still want to push it, because `Some("")` is a single
             // empty line
-            node_parts.push(body.to_string());
+            node_parts.push(body.to_string(format));
         }
 
         // Convert all the top-level children
@@ -204,7 +204,7 @@ impl<I: ParseId, S: ParseString> Properties<I, S> {
             }
             properties_str.push_str(&k);
             properties_str.push_str(": ");
-            properties_str.push_str(&v.to_string());
+            properties_str.push_str(&v.to_string(format));
         }
         properties_str.push('\n');
         properties_str.push_str(format.get_properties_closer());
